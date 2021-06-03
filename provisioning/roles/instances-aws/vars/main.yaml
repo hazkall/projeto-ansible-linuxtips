@@ -1,0 +1,7 @@
+---
+sec_group_name: giropops-strigus
+instance_type: t2.medium
+image: ami-0747bdcabd34c712a # Ubuntu 18.04 lts us-east-1
+keypair: aws_key # keypar on aws
+region: us-east-1
+count: 3

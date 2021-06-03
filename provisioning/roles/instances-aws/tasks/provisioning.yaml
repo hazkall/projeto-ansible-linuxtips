@@ -1,0 +1,130 @@
+- name: Creating Security Group on AWS
+  local_action:
+    module: ec2_group
+    name:  "{{ sec_group_name }}"
+    description: sg giropops
+    region: "{{ region }}"
+    rules:
+      - proto: tcp
+        from_port: 22
+        to_port: 22
+        cidr_ip: 0.0.0.0/0
+        rule_desc: SSH
+      - proto: tcp
+        from_port: 2379
+        to_port: 2380
+        cidr_ip: 0.0.0.0/0
+        rule_desc: etcd server API
+      - proto: tcp
+        from_port: 6443
+        to_port: 6443
+        cidr_ip: 0.0.0.0/0
+        rule_desc: kube-apiserver
+      - proto: tcp
+        from_port: 10250
+        to_port: 10250
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Kubelet API
+      - proto: tcp
+        from_port: 10251
+        to_port: 10251
+        cidr_ip: 0.0.0.0/0
+        rule_desc: kube-scheduler
+      - proto: tcp
+        from_port: 10252
+        to_port: 10252
+        cidr_ip: 0.0.0.0/0
+        rule_desc: kube-controller-manager
+      - proto: tcp
+        from_port: 10255
+        to_port: 10255
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Kubelet API Read-only
+      - proto: tcp
+        from_port: 30000
+        to_port: 32767
+        cidr_ip: 0.0.0.0/0
+        rule_desc: NodePort Services
+      - proto: tcp
+        from_port: 179
+        to_port: 179
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Calico
+      - proto: tcp
+        from_port: 5473
+        to_port: 5473
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Calico
+      - proto: tcp
+        from_port: 443
+        to_port: 443
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Calico
+      - proto: tcp
+        from_port: 2379
+        to_port: 2379
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Calico
+      - proto: udp
+        from_port: 4789
+        to_port: 4789
+        cidr_ip: 0.0.0.0/0
+        rule_desc: Calico
+    rules_egress:
+      - proto: all
+        cidr_ip: 0.0.0.0/0
+
+- name: Create instances on EC2
+  local_action: 
+    module: ec2 
+    group: "{{ sec_group_name }}" 
+    instance_type: "{{ instance_type }}" 
+    image:  "{{ image }}" 
+    wait: true 
+    region: "{{ region }}" 
+    key_name: "{{ keypair }}"
+    count: "{{ count }}"
+  register: ec2
+
+- name: Add instance variables to temp
+  add_host: 
+    name: "{{ item.public_ip }}" 
+    groups: giropops-new 
+  loop: "{{ ec2.instances }}"
+
+- name: Add Public IP of Temp to hosts
+  local_action:
+    module: lineinfile
+    dest: "hosts"
+    regexp: "{{ item.public_ip }}"
+    insertafter: "[kubernetes]" 
+    line: "{{ item.public_ip }}"
+  loop: "{{ ec2.instances }}"
+
+- name: Add Private IP of Temp to hosts
+  local_action:
+    module: lineinfile
+    dest: "hosts"
+    regexp: "{{ item.private_ip }}" 
+    insertafter: "[kubernetes]" 
+    line: "{{ item.private_ip }}"
+  loop: "{{ ec2.instances }}"
+
+- name: Wait for SSH access on EC2
+  local_action:
+    module: wait_for
+    host: "{{ item.public_ip }}"
+    port: 22
+    state: started
+  loop: "{{ ec2.instances }}"
+
+- name: Add Name tag to instances
+  local_action:
+    module: ec2_tag
+    resource: "{{  item.id }}"
+    region: "{{ region }}"
+    state: present
+  loop: "{{ ec2.instances }}"
+  args:
+    tags:
+      Name: node-{{ item.ami_launch_index| int+ 1 }}

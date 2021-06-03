@@ -1,0 +1,109 @@
+---
+
+### IPTables Config
+
+- name: Configuration IPTables for CRI-O
+  lineinfile:
+    path: /etc/sysctl.d/99-kubernetes-cri.conf
+    line: "{{ item }}"
+    create: yes
+  loop:
+    - "net.bridge.bridge-nf-call-ip6tables = 1"
+    - "net.bridge.bridge-nf-call-iptables = 1"
+    - "net.ipv4.ip_forward = 1"
+  register: iptables
+
+- name: Sysctl --system
+  shell: sysctl --system
+  when: iptables is changed  
+
+
+### Kubernetes and CRI-O Network Modules
+
+- name: Module Kernel configuration
+  lineinfile:
+    path: /etc/modules-load.d/crio.conf
+    line: "{{ item }}"
+    create: yes
+  loop: "{{ k8s_modules }}"
+
+- name: Ensure Network modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ k8s_modules }}"
+
+### Install CRI-O
+
+
+- name: Add CRIO APT keys
+  apt_key:
+    url: "{{ item }}"
+    state: present
+  loop:
+    - https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ CRIO_OS }}/Release.key
+    - https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ CRIO_VERSION }}/{{ CRIO_OS }}/Release.key
+
+
+- name: Add CRI-O Repo
+  apt_repository:
+    repo: "{{ item.repo }}"
+    state: present
+    filename: "{{ item.filename }}"
+  loop:
+    - {repo: "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/{{ CRIO_OS }}/ /", filename: "devel:kubic:libcontainers:stable"}
+    - {repo: "deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ CRIO_VERSION }}/{{ CRIO_OS }}/ /", filename: "devel:kubic:libcontainers:stable:cri-o:{{ CRIO_VERSION }}"}
+
+- name: CRIO Runtime
+  blockinfile:
+    path: /etc/crio/crio.conf.d/02-cgroup-manager.conf
+    block: |
+      [crio.runtime]
+      conmon_cgroup = "pod"
+      cgroup_manager = "systemd"
+    create: yes
+
+- name: Install CRI-O
+  apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: yes
+  loop:
+    - cri-o
+    - cri-o-runc
+  notify: Enable CRI-O
+
+### Install Kubernetes
+
+- name: Add K8S APT keys
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: ADD repo K8S
+  apt_repository:
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+    state: present
+
+- name: Instalando os pacotes KUBEADM KUBELET KUBECTL
+  apt:
+    name: "{{ packages }}"
+  vars:
+    packages:
+    - kubelet
+    - kubeadm
+    - kubectl
+    - apt-transport-https
+    - ca-certificates
+  notify: Enable Kubelet
+
+# Get Kubeadm version to kubeadm-config.yaml
+
+- name: Kubeadm Version
+  shell: kubeadm version |sed 's/,/\n/g'| grep "GitVersion" | cut -d':' -f2 | tr -d '"' | tr -d 'v'
+  register: k8s_version
+
+- name: Hold kubeadmversion
+  add_host:
+    name: K8S_VERSION_HOLDER
+    version: "{{ k8s_version.stdout }}"

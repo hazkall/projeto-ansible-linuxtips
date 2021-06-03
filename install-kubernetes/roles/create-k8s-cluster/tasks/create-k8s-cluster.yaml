@@ -1,0 +1,83 @@
+- name: ""
+  debug:
+    msg: "[Master] K8S_VERSION_HOLDER K8S version is {{ hostvars['K8S_VERSION_HOLDER']['version'] }}"
+
+### Copy the kubeadm configuration file
+- name: Creating dir Giropops
+  file:
+    path: /opt/giropops
+    state: directory
+    mode: '0775'
+
+- name: Copy Kubeadm-config
+  template:
+    src: kubeadm-config.yaml.j2
+    dest: /opt/giropops/kubeadm-config.yaml
+    owner: root
+    group: root
+    mode: 0644
+
+#### Cluster reset
+
+- name: Kubeadm reset
+  shell: kubeadm reset --force
+
+- name: Kubeadm Control Plane Images Pull
+  shell: kubeadm config images pull
+
+### Cluster Init
+- name: Kubeadm init
+  shell: kubeadm init --config=/opt/giropops/kubeadm-config.yaml --upload-certs
+
+
+### Root and Ubuntu users Kubectl config
+- name: Criando o diretorio .kube
+  file:
+    path: ~/.kube
+    state: directory
+
+
+- name: Linkando o arquivo admin.conf para o ~/.kube/config
+  file:
+    src: /etc/kubernetes/admin.conf
+    dest: ~/.kube/config
+    state: link 
+
+# Configure Calico PodNetwork
+
+- name: Deployment of Calico Pod Network
+  shell: | 
+    kubectl apply -f {{ calico[0] }} && \
+    kubectl apply -f {{ calico[1] }}
+  register: calico
+
+# Tokens to join Workers
+
+- name: Get tokens to join workers
+  shell: kubeadm token list | grep 'authentication,signing' | awk '{if(NR==1) print$1}'
+  register: k8s_token
+
+- name: CA Hash
+  shell: openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
+  register: k8s_master_ca_hash
+
+
+- name: Add token and hash to the dummy host
+  add_host:
+    name: K8S_TOKEN_HOLDER
+    token: "{{ k8s_token.stdout }}"
+    hash: "{{ k8s_master_ca_hash.stdout }}"
+
+
+# Debug Messages to admin
+
+- name: ""
+  debug:
+    msg: "{{ calico.stdout }}"
+
+- name: ""
+  debug:
+    msg: "[Master] K8S_TOKEN_HOLDER K8S token is {{ hostvars['K8S_TOKEN_HOLDER']['token'] }}"
+- name: ""
+  debug:
+    msg: "[Master] K8S_TOKEN_HOLDER K8S Hash is  {{ hostvars['K8S_TOKEN_HOLDER']['hash'] }}"

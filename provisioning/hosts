@@ -1,0 +1,10 @@
+[local]
+localhost ansible_connection=local  ansible_python_intepreter=python gather_facts=false
+
+
+[kubernetes]
+
+
+
+
+

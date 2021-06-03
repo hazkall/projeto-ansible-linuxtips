@@ -1,0 +1,3 @@
+---
+
+- include: install-k8s.yaml

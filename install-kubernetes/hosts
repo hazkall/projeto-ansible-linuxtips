@@ -1,0 +1,19 @@
+[k8s-masters]
+master ansible_host=node-1 ansible_ssh_host=3.237.85.93
+
+[k8s-workers]
+worker1 ansible_host=node-2 ansible_ssh_host=3.226.249.90
+worker2 ansible_host=node-3 ansible_ssh_host=3.237.185.174
+
+[kubernetes:children]
+k8s-masters
+k8s-workers
+
+[kubernetes:vars]
+hostname_master=node-1
+hostname_worker1=node-2
+hostname_worker2=node-3
+K8S_MASTER_NODE_IP=172.31.2.149
+K8s_WORKER1_NODE_IP=172.31.6.69
+K8s_WORKER2_NODE_IP=172.31.14.119
+K8S_API_SECURE_PORT=6443

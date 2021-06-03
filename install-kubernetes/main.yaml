@@ -1,0 +1,66 @@
+### Prepare Instances
+- hosts: kubernetes
+  become: yes
+  user: ubuntu
+  pre_tasks:
+  - name: Set hostname to node
+    hostname:
+      name: "{{ ansible_host }}"
+      use: systemd
+    register: set_hostname
+  - name: Set hostnames to /etc/hosts
+    blockinfile:
+      path: /etc/hosts
+      block: |
+        127.0.0.1 localhost {{ ansible_hostname }}
+        {{ K8S_MASTER_NODE_IP }} {{ hostname_master }}
+        {{ K8s_WORKER1_NODE_IP }} {{ hostname_worker1 }}
+        {{ K8s_WORKER2_NODE_IP }} {{ hostname_worker2 }}
+  - name: Instance reboot
+    reboot:
+      pre_reboot_delay: 20
+      post_reboot_delay: 120  
+    when: set_hostname is changed      
+  - name: 'Update repo'
+    raw: 'apt update'
+    args:
+      warn: false
+  - name: 'Install python'
+    raw: 'apt install -y python'
+    args:
+      warn: false
+### End of prepare
+  roles:
+    - role: install-kubernetes
+      tags: install-kubernetes
+
+- hosts: k8s-masters
+  become: yes
+  user: ubuntu
+  roles:
+    - role: create-k8s-cluster
+      tags: create-k8s-cluster
+
+- hosts: k8s-workers
+  become: yes
+  user: ubuntu
+  roles:
+    - role: configure-k8s-workers
+      tags: configure-k8s-workers
+
+- hosts: k8s-masters
+  become: yes
+  user: ubuntu
+  roles:
+    - role: install-helm
+      tags: install-helm
+
+- hosts: k8s-masters
+  become: yes
+  user: ubuntu
+  roles:
+    - role: prometheus-operator
+      tags: prometheus-operator
+
+
+

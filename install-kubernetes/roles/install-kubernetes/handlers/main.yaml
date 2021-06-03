@@ -1,0 +1,13 @@
+---
+
+- name: Enable CRI-O
+  service:
+    name: crio
+    enabled: yes
+    state: started
+
+- name: Enable Kubelet
+  service:
+    name: kubelet
+    enabled: yes
+    state: started

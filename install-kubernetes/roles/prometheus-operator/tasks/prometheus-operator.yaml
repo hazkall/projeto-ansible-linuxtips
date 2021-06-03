@@ -1,0 +1,22 @@
+
+- name: Copy namespace manifest monitoring
+  copy:
+    src: monitoring.yaml
+    dest: /opt/giropops/monitoring.yaml
+
+- name: Create Namespace Monitoring
+  shell: kubectl apply -f /opt/giropops/monitoring.yaml
+
+- name: helm add repo
+  command: helm repo add stable {{ url_repo_helm }}
+  register: prometheus_add_repo
+
+- name: helm update
+  command: helm repo update
+  register: prometheus_repo_update
+  changed_when: '"Update Complete" in prometheus_repo_update.stdout'
+
+- name: Instalando o Prometheus Operator
+  command: helm install {{ deploy_prometheus }} --namespace monitoring
+  register: prometheus_install
+  changed_when: True
